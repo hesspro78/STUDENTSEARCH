@@ -2,15 +2,17 @@ import React, { useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { Heart, Eye, Users, TrendingUp, Star, MapPin, GraduationCap, Mail } from 'lucide-react';
+import { Heart, Eye, Users, TrendingUp, Star, MapPin, GraduationCap, Mail, Shield } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
-import { studentsData } from '@/data/students';
+import { studentsData, emailValidationStats } from '@/data/enhanced-students';
 import { toast } from '@/components/ui/use-toast';
 import { useSettings } from '@/hooks/useSettings';
+import EmailVerificationBadge from '@/components/EmailVerificationBadge';
+import EmailValidationStats from '@/components/EmailValidationStats';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -27,7 +29,12 @@ const Dashboard = () => {
   const favoriteStudents = useMemo(() => studentsData.filter(student => favorites.includes(student.id)), [favorites]);
   
   const recommendedProfiles = useMemo(() => {
-    if (favoriteStudents.length === 0) return studentsData.slice(0, 3);
+    if (favoriteStudents.length === 0) {
+      // Return verified email profiles first
+      return studentsData
+        .filter(student => student.emailStatus === 'VERIFIED')
+        .slice(0, 3);
+    }
     
     const favoriteDomains = favoriteStudents.reduce((acc, student) => {
         acc[student.domain] = (acc[student.domain] || 0) + 1;
@@ -37,7 +44,9 @@ const Dashboard = () => {
     const topDomain = Object.keys(favoriteDomains).sort((a,b) => favoriteDomains[b] - favoriteDomains[a])[0];
 
     return studentsData.filter(student => 
-        student.domain === topDomain && !favorites.includes(student.id)
+        student.domain === topDomain && 
+        !favorites.includes(student.id) &&
+        student.emailStatus === 'VERIFIED'
     ).slice(0, 3);
   }, [favorites, favoriteStudents]);
 
@@ -45,11 +54,12 @@ const Dashboard = () => {
     return null;
   }
 
+  const verifiedContactsCount = studentsData.filter(s => s.emailStatus === 'VERIFIED').length;
   const stats = [
     { title: "Profils Consultés", value: viewedProfiles.length, icon: Eye, color: "text-blue-600", bgColor: "bg-blue-100" },
     { title: "Favoris", value: favorites.length, icon: Heart, color: "text-red-600", bgColor: "bg-red-100" },
     { title: "Contacts Initiés", value: contactedProfiles.length, icon: Mail, color: "text-green-600", bgColor: "bg-green-100" },
-    { title: "Taux de Conversion", value: `${viewedProfiles.length > 0 ? ((contactedProfiles.length / viewedProfiles.length) * 100).toFixed(1) : 0}%`, icon: TrendingUp, color: "text-purple-600", bgColor: "bg-purple-100" }
+    { title: "Contacts Vérifiés", value: verifiedContactsCount, icon: Shield, color: "text-purple-600", bgColor: "bg-purple-100" }
   ];
 
   const handleRemoveFavorite = (studentId) => {
@@ -62,8 +72,8 @@ const Dashboard = () => {
       toast({ title: "Connexion requise", description: "Veuillez vous connecter pour contacter un étudiant.", variant: "destructive" });
       return;
     }
-    if (!student.email) {
-      toast({ title: "Contact incomplet", description: "L'adresse email de cet étudiant n'est pas disponible.", variant: "destructive" });
+    if (!student.email || student.emailStatus !== 'VERIFIED') {
+      toast({ title: "Contact non vérifié", description: "L'adresse email de cet étudiant n'est pas vérifiée.", variant: "destructive" });
       return;
     }
 
@@ -86,16 +96,30 @@ const Dashboard = () => {
         </div>
         <div className="flex-1">
           <h4 className="font-semibold text-gray-900">{student.firstName} {student.lastName}</h4>
-          <div className="flex items-center text-sm text-gray-600 mb-1">
+          <div className="flex items-center text-xs text-gray-500 mt-1">
             <MapPin className="h-3 w-3 mr-1" />
             <span>{student.country}</span>
           </div>
-          <Badge variant="secondary" className="text-xs">{student.domain}</Badge>
+          <div className="mt-2">
+            <Badge variant="outline" className="text-xs mr-2">{student.domain}</Badge>
+            <EmailVerificationBadge 
+              email={student.email}
+              status={student.emailStatus}
+              className="inline-block"
+            />
+          </div>
         </div>
         <div className="flex flex-col space-y-2">
           {type === 'favorite' ? (
             <>
-              <Button size="sm" onClick={() => handleContactClick(student)} disabled={!student.email} className="text-xs">Contacter</Button>
+              <Button 
+                size="sm" 
+                onClick={() => handleContactClick(student)} 
+                disabled={student.emailStatus !== 'VERIFIED'} 
+                className="text-xs"
+              >
+                {student.emailStatus === 'VERIFIED' ? 'Contacter' : 'Non vérifié'}
+              </Button>
               <Button size="sm" variant="outline" onClick={() => handleRemoveFavorite(student.id)} className="text-xs text-red-600 hover:text-red-700">Retirer</Button>
             </>
           ) : (
@@ -140,6 +164,10 @@ const Dashboard = () => {
                 </Card>
               </motion.div>
             ))}
+          </div>
+
+          <div className="mb-8">
+            <EmailValidationStats stats={emailValidationStats} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

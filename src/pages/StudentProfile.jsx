@@ -2,19 +2,18 @@ import React, { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { ArrowLeft, MapPin, GraduationCap, Mail, Phone, Heart, Info, Linkedin, Rss, Users } from 'lucide-react';
+import { ArrowLeft, MapPin, GraduationCap, Mail, Phone, Heart, Info, Linkedin, Rss, Users, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { studentsData } from '@/data/students';
+import { studentsData } from '@/data/enhanced-students';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { toast } from '@/components/ui/use-toast';
 import { findSimilarProfiles } from '@/lib/scoring';
 import SimilarProfileCard from '@/components/SimilarProfileCard';
 import { useSettings } from '@/hooks/useSettings';
-import VerificationBadge from '@/components/VerificationBadge';
-
+import EmailVerificationBadge from '@/components/EmailVerificationBadge';
 
 const StudentProfile = () => {
   const { id } = useParams();
@@ -87,8 +86,13 @@ const StudentProfile = () => {
       });
       return;
     }
-     if (!student.email) {
-      toast({ title: "Contact incomplet", description: "L'adresse email de cet étudiant n'est pas disponible.", variant: "destructive" });
+    
+    if (!student.email || student.emailStatus !== 'VERIFIED') {
+      toast({ 
+        title: "Contact non vérifié", 
+        description: "L'adresse email de cet étudiant n'est pas vérifiée.", 
+        variant: "destructive" 
+      });
       return;
     }
 
@@ -149,9 +153,9 @@ const StudentProfile = () => {
               <Card className="sticky top-24">
                 <CardContent className="p-6">
                   <div className="text-center mb-6">
-                     <div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center flex-shrink-0 border-4 border-white shadow-lg">
-                        <span className="text-5xl font-bold text-blue-600">{student.firstName[0]}{student.lastName[0]}</span>
-                      </div>
+                    <div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center flex-shrink-0 border-4 border-white shadow-lg">
+                      <span className="text-5xl font-bold text-blue-600">{student.firstName[0]}{student.lastName[0]}</span>
+                    </div>
                   </div>
 
                   <div className="text-center mb-6">
@@ -162,16 +166,41 @@ const StudentProfile = () => {
                       <MapPin className="h-4 w-4 mr-1" />
                       <span>{student.city}, {student.country}</span>
                     </div>
-                     <SourceBadge source={student.source} />
+                    <div className="mb-3">
+                      <SourceBadge source={student.source} />
+                    </div>
+                    <EmailVerificationBadge 
+                      email={student.email}
+                      status={student.emailStatus}
+                      verifiedAt={student.emailVerifiedAt}
+                      source={student.emailSource}
+                    />
                   </div>
 
                   <div className="space-y-3">
-                    <Button onClick={handleContactClick} disabled={!student.email} className="w-full flex items-center justify-center space-x-2 py-3">
-                      <Mail className="h-4 w-4" /><span>Contacter l'Étudiant</span>
+                    <Button 
+                      onClick={handleContactClick} 
+                      disabled={student.emailStatus !== 'VERIFIED'} 
+                      className="w-full flex items-center justify-center space-x-2 py-3"
+                    >
+                      <Mail className="h-4 w-4" />
+                      <span>{student.emailStatus === 'VERIFIED' ? 'Contacter l\'Étudiant' : 'Email non vérifié'}</span>
                     </Button>
-                    <Button variant="outline" onClick={handleFavoriteToggle} className={`w-full flex items-center justify-center space-x-2 py-3 ${isFavorite(student.id) ? 'text-red-600 border-red-200 hover:bg-red-50' : 'hover:bg-gray-50'}`}><Heart className={`h-4 w-4 ${isFavorite(student.id) ? 'fill-current' : ''}`} /><span>{isFavorite(student.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}</span></Button>
-                    {student.contactStatus === 'email_missing' && (
-                      <Button variant="secondary" onClick={handleManualVerification} className="w-full">Vérifier Manuellement</Button>
+                    
+                    <Button 
+                      variant="outline" 
+                      onClick={handleFavoriteToggle} 
+                      className={`w-full flex items-center justify-center space-x-2 py-3 ${isFavorite(student.id) ? 'text-red-600 border-red-200 hover:bg-red-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <Heart className={`h-4 w-4 ${isFavorite(student.id) ? 'fill-current' : ''}`} />
+                      <span>{isFavorite(student.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}</span>
+                    </Button>
+                    
+                    {student.emailStatus === 'MANUAL_VERIFICATION_NEEDED' && (
+                      <Button variant="secondary" onClick={handleManualVerification} className="w-full">
+                        <Shield className="h-4 w-4 mr-2" />
+                        Vérifier Manuellement
+                      </Button>
                     )}
                   </div>
                 </CardContent>
@@ -179,29 +208,114 @@ const StudentProfile = () => {
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }} className="lg:col-span-2 space-y-6">
-              <Card><CardHeader><CardTitle className="flex items-center justify-between">
-                <div className="flex items-center space-x-2"><Info className="h-5 w-5 text-gray-600" /><span>À propos de {student.firstName}</span></div>
-                <VerificationBadge status={student.contactStatus} />
-              </CardTitle></CardHeader><CardContent><p className="text-gray-700 leading-relaxed">{student.bio}</p></CardContent></Card>
-              <Card><CardHeader><CardTitle className="flex items-center space-x-2"><Mail className="h-5 w-5 text-blue-600" /><span>Informations de Contact</span></CardTitle></CardHeader>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Info className="h-5 w-5 text-gray-600" />
+                      <span>À propos de {student.firstName}</span>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 leading-relaxed">{student.bio}</p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Mail className="h-5 w-5 text-blue-600" />
+                    <span>Informations de Contact</span>
+                  </CardTitle>
+                </CardHeader>
                 <CardContent>
                   {user ? (
                     <div className="space-y-4">
-                      <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"><Mail className="h-5 w-5 text-gray-600" /><div><p className="text-sm text-gray-600">Email</p><p className="font-medium text-gray-900">{student.email || 'Non disponible'}</p></div></div>
-                      <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"><Phone className="h-5 w-5 text-gray-600" /><div><p className="text-sm text-gray-600">Téléphone</p><p className="font-medium text-gray-900">{student.phone || 'Non disponible'}</p></div></div>
+                      <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <Mail className="h-5 w-5 text-gray-600" />
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-600">Email</p>
+                          <p className="font-medium text-gray-900">
+                            {student.emailStatus === 'VERIFIED' ? student.email : 'Non disponible'}
+                          </p>
+                          {student.emailStatus !== 'VERIFIED' && (
+                            <p className="text-xs text-amber-600 mt-1">
+                              {student.emailRejectionReason && `Raison: ${student.emailRejectionReason}`}
+                            </p>
+                          )}
+                        </div>
+                        <EmailVerificationBadge 
+                          email={student.email}
+                          status={student.emailStatus}
+                          className="ml-auto"
+                        />
+                      </div>
+                      
+                      <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <Phone className="h-5 w-5 text-gray-600" />
+                        <div>
+                          <p className="text-sm text-gray-600">Téléphone</p>
+                          <p className="font-medium text-gray-900">
+                            {student.phoneStatus === 'VERIFIED' ? student.phone : 'Non disponible'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  ) : (<div className="text-center py-8"><Mail className="h-12 w-12 text-gray-300 mx-auto mb-4" /><p className="text-gray-600 mb-4">Connectez-vous pour accéder aux informations de contact</p><Button onClick={() => navigate('/connexion')}>Se connecter</Button></div>)}
+                  ) : (
+                    <div className="text-center py-8">
+                      <Mail className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-600 mb-4">Connectez-vous pour accéder aux informations de contact</p>
+                      <Button onClick={() => navigate('/connexion')}>Se connecter</Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-              <Card><CardHeader><CardTitle className="flex items-center space-x-2"><GraduationCap className="h-5 w-5 text-green-600" /><span>Projet Académique</span></CardTitle></CardHeader>
-                <CardContent><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-4 bg-gray-50 rounded-lg"><h4 className="font-semibold text-gray-900 mb-2">Domaine d'Études</h4><p className="text-gray-700">{student.domain}</p></div><div className="p-4 bg-gray-50 rounded-lg"><h4 className="font-semibold text-gray-900 mb-2">Spécialisation</h4><p className="text-gray-700">{student.specialization}</p></div><div className="p-4 bg-gray-50 rounded-lg"><h4 className="font-semibold text-gray-900 mb-2">Niveau Souhaité</h4><p className="text-gray-700">{student.level}</p></div><div className="p-4 bg-gray-50 rounded-lg"><h4 className="font-semibold text-gray-900 mb-2">Pays d'Origine</h4><p className="text-gray-700">{student.country}</p></div></div></CardContent>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <GraduationCap className="h-5 w-5 text-green-600" />
+                    <span>Projet Académique</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-semibold text-gray-900 mb-2">Domaine d'Études</h4>
+                      <p className="text-gray-700">{student.domain}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-semibold text-gray-900 mb-2">Spécialisation</h4>
+                      <p className="text-gray-700">{student.specialization}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-semibold text-gray-900 mb-2">Niveau Souhaité</h4>
+                      <p className="text-gray-700">{student.level}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-semibold text-gray-900 mb-2">Pays d'Origine</h4>
+                      <p className="text-gray-700">{student.country}</p>
+                    </div>
+                  </div>
+                </CardContent>
               </Card>
-               {similarProfiles.length > 0 && (
+               
+              {similarProfiles.length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle className="flex items-center space-x-2"><Users className="h-5 w-5 text-purple-600" /><span>Profils Similaires</span></CardTitle></CardHeader>
-                  <CardContent><div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">{similarProfiles.map(p => <SimilarProfileCard key={p.id} student={p} />)}</div></CardContent>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Users className="h-5 w-5 text-purple-600" />
+                      <span>Profils Similaires</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      {similarProfiles.map(p => <SimilarProfileCard key={p.id} student={p} />)}
+                    </div>
+                  </CardContent>
                 </Card>
-               )}
+              )}
             </motion.div>
           </div>
         </div>
