@@ -1,13 +1,14 @@
 import { studentsData as rawProfiles } from '@/data/student-profiles';
 import { validateAndFilterStudents } from '@/lib/real-contact-validator';
 
-// Application de la validation stricte - SUPPRESSION de tous les contacts fictifs
+// Application de la validation stricte avec URLs sources - SUPPRESSION de tous les contacts fictifs
 const validationResult = validateAndFilterStudents(rawProfiles);
 
-// IMPORTANT: Seuls les profils avec contacts RÉELS et VÉRIFIÉS sont conservés
+// IMPORTANT: Seuls les profils avec contacts RÉELS, VÉRIFIÉS et URL SOURCE sont conservés
 export const studentsData = validationResult.validStudents;
 export const validationStats = validationResult.stats;
 export const manualReviewQueue = validationResult.manualReviewQueue;
+export const sourceDomainStats = validationResult.sourceDomainStats;
 
 // Statistiques de qualité des contacts
 export const contactQualityStats = {
@@ -15,7 +16,8 @@ export const contactQualityStats = {
   good: studentsData.filter(s => s.contactQuality === 'GOOD').length,
   emailOnly: studentsData.filter(s => s.emailStatus === 'VERIFIED' && s.phoneStatus !== 'VERIFIED').length,
   phoneOnly: studentsData.filter(s => s.phoneStatus === 'VERIFIED' && s.emailStatus !== 'VERIFIED').length,
-  totalValid: studentsData.length
+  totalValid: studentsData.length,
+  withSourceUrl: studentsData.filter(s => s.sourceUrl).length
 };
 
 // Filtres pour l'interface
@@ -55,5 +57,14 @@ export const verifiedEmailDomains = [
     studentsData
       .filter(s => s.emailStatus === 'VERIFIED' && s.email)
       .map(s => s.email.split('@')[1])
+  )
+].sort();
+
+// Domaines sources pour filtrage
+export const sourceDomains = [
+  ...new Set(
+    studentsData
+      .filter(s => s.sourceDomain)
+      .map(s => s.sourceDomain)
   )
 ].sort();

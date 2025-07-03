@@ -18,7 +18,8 @@ import {
   emailProviders,
   verifiedEmailDomains,
   validationStats,
-  contactQualityStats
+  contactQualityStats,
+  sourceDomainStats
 } from '@/data/real-students-data';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
@@ -207,12 +208,12 @@ const Search = () => {
 
   return (
     <>
-      <Helmet><title>Rechercher des Étudiants - EduConnect Maroc</title><meta name="description" content="Recherchez des étudiants africains francophones avec validation stricte des contacts authentiques." /></Helmet>
+      <Helmet><title>Rechercher des Étudiants - EduConnect Maroc</title><meta name="description" content="Recherchez des étudiants africains francophones avec validation stricte des contacts authentiques et traçabilité complète." /></Helmet>
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Recherche de Profils Étudiants</h1>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">Contacts 100% authentiques et vérifiés - Aucun email fictif</p>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">Contacts 100% authentiques avec traçabilité complète - URLs sources vérifiées</p>
             <div className="mt-4 flex justify-center">
               <Button 
                 variant="outline" 
@@ -228,7 +229,11 @@ const Search = () => {
 
           {showValidationStats && (
             <div className="mb-8">
-              <ValidationStatsCard stats={validationStats} contactStats={contactQualityStats} />
+              <ValidationStatsCard 
+                stats={validationStats} 
+                contactStats={contactQualityStats} 
+                sourceDomainStats={sourceDomainStats}
+              />
             </div>
           )}
 
@@ -277,7 +282,7 @@ const Search = () => {
             <main className="lg:col-span-3">
               <div className="mb-6 flex justify-between items-center">
                 <p className="text-gray-600">
-                  <span className="font-semibold">{filteredStudents.length}</span> profil(s) avec contacts vérifiés
+                  <span className="font-semibold">{filteredStudents.length}</span> profil(s) avec contacts vérifiés et sources tracées
                   {showOnlyExcellentContacts && <Badge variant="verified" className="ml-2">Contacts Excellents</Badge>}
                 </p>
                 <AnimatePresence>
@@ -312,7 +317,7 @@ const Search = () => {
                                 <MapPin className="h-4 w-4 mr-1 text-gray-400" />
                                 <span>{student.city}, {student.country}</span>
                               </div>
-                              <ContactQualityBadge student={student} />
+                              <ContactQualityBadge student={student} showSourceUrl={true} />
                             </div>
                             
                             <div className="space-y-3 mb-4 flex-grow">
@@ -348,7 +353,7 @@ const Search = () => {
                   <div className="text-center py-16">
                     <Shield className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Aucun contact vérifié trouvé</h3>
-                    <p className="text-gray-600 mb-4">Tous les profils affichés ont des contacts authentiques et vérifiés.</p>
+                    <p className="text-gray-600 mb-4">Tous les profils affichés ont des contacts authentiques avec sources tracées.</p>
                     <Button onClick={clearFilters} variant="outline">Réinitialiser les filtres</Button>
                   </div>
                 )}

@@ -28,17 +28,60 @@ const AUTHORIZED_SOURCES = {
   PUBLIC_DIRECTORY: 'public_directory'
 };
 
+// Validation stricte des URLs sources
+const URL_REGEX = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
+
 export class RealContactValidator {
   constructor() {
     this.rejectedContacts = new Map();
     this.validatedContacts = new Map();
     this.manualReviewQueue = [];
+    this.sourceUrls = new Map(); // Traçabilité des URLs sources
+  }
+
+  /**
+   * Validation stricte d'URL source
+   */
+  validateSourceUrl(sourceUrl) {
+    if (!sourceUrl || typeof sourceUrl !== 'string') {
+      return { isValid: false, reason: 'SOURCE_URL_MISSING' };
+    }
+
+    const trimmedUrl = sourceUrl.trim();
+
+    // Vérification format URL valide
+    if (!URL_REGEX.test(trimmedUrl)) {
+      return { isValid: false, reason: 'INVALID_URL_FORMAT' };
+    }
+
+    // Vérification protocole sécurisé
+    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+      return { isValid: false, reason: 'INVALID_PROTOCOL' };
+    }
+
+    return { 
+      isValid: true, 
+      url: trimmedUrl,
+      domain: this.extractDomainFromUrl(trimmedUrl)
+    };
+  }
+
+  /**
+   * Extraction du domaine depuis une URL
+   */
+  extractDomainFromUrl(url) {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname;
+    } catch (error) {
+      return null;
+    }
   }
 
   /**
    * Validation stricte d'email - rejette tout ce qui n'est pas authentique
    */
-  validateEmail(email, source = null) {
+  validateEmail(email, source = null, sourceUrl = null) {
     if (!email || typeof email !== 'string') {
       return { isValid: false, reason: 'EMAIL_MISSING' };
     }
@@ -47,7 +90,7 @@ export class RealContactValidator {
 
     // Vérification format strict
     if (!STRICT_EMAIL_REGEX.test(normalizedEmail)) {
-      this.logRejection(normalizedEmail, 'INVALID_FORMAT', source);
+      this.logRejection(normalizedEmail, 'INVALID_FORMAT', source, sourceUrl);
       return { isValid: false, reason: 'INVALID_FORMAT' };
     }
 
@@ -56,36 +99,42 @@ export class RealContactValidator {
 
     // Vérification domaines interdits
     if (FORBIDDEN_DOMAINS.includes(domain)) {
-      this.logRejection(normalizedEmail, 'FORBIDDEN_DOMAIN', source);
+      this.logRejection(normalizedEmail, 'FORBIDDEN_DOMAIN', source, sourceUrl);
       return { isValid: false, reason: 'FORBIDDEN_DOMAIN' };
     }
 
     // Vérification patterns auto-générés
     for (const pattern of AUTO_GENERATED_PATTERNS) {
       if (pattern.test(normalizedEmail)) {
-        this.logRejection(normalizedEmail, 'AUTO_GENERATED_PATTERN', source);
+        this.logRejection(normalizedEmail, 'AUTO_GENERATED_PATTERN', source, sourceUrl);
         return { isValid: false, reason: 'AUTO_GENERATED_PATTERN' };
       }
     }
 
     // Vérification source autorisée
     if (source && !Object.values(AUTHORIZED_SOURCES).includes(source)) {
-      this.logRejection(normalizedEmail, 'UNAUTHORIZED_SOURCE', source);
+      this.logRejection(normalizedEmail, 'UNAUTHORIZED_SOURCE', source, sourceUrl);
       return { isValid: false, reason: 'UNAUTHORIZED_SOURCE' };
+    }
+
+    // Enregistrement de la source URL pour traçabilité
+    if (sourceUrl) {
+      this.sourceUrls.set(normalizedEmail, sourceUrl);
     }
 
     return { 
       isValid: true, 
       email: normalizedEmail,
       domain,
-      provider: this.getEmailProvider(domain)
+      provider: this.getEmailProvider(domain),
+      sourceUrl: sourceUrl
     };
   }
 
   /**
    * Validation stricte de numéro de téléphone
    */
-  validatePhone(phone, country = null) {
+  validatePhone(phone, country = null, sourceUrl = null) {
     if (!phone || typeof phone !== 'string') {
       return { isValid: false, reason: 'PHONE_MISSING' };
     }
@@ -94,19 +143,20 @@ export class RealContactValidator {
 
     // Vérification format strict avec indicatifs valides
     if (!VALID_PHONE_REGEX.test(cleanPhone)) {
-      this.logRejection(phone, 'INVALID_PHONE_FORMAT', null);
+      this.logRejection(phone, 'INVALID_PHONE_FORMAT', null, sourceUrl);
       return { isValid: false, reason: 'INVALID_PHONE_FORMAT' };
     }
 
     return { 
       isValid: true, 
       phone: cleanPhone,
-      countryCode: cleanPhone.substring(0, 4)
+      countryCode: cleanPhone.substring(0, 4),
+      sourceUrl: sourceUrl
     };
   }
 
   /**
-   * Validation complète d'un contact étudiant
+   * Validation complète d'un contact étudiant avec URL source obligatoire
    */
   validateStudentContact(studentData) {
     const result = {
@@ -120,24 +170,58 @@ export class RealContactValidator {
       level: studentData.level,
       bio: studentData.bio,
       source: studentData.source,
+      sourceUrl: null, // URL source obligatoire
       residentInMorocco: studentData.residentInMorocco,
       hasValidContact: false,
       emailStatus: 'MISSING',
       phoneStatus: 'MISSING',
-      contactQuality: 'INCOMPLETE'
+      contactQuality: 'INCOMPLETE',
+      extractedAt: new Date().toISOString()
     };
+
+    // Validation URL source OBLIGATOIRE
+    if (studentData.sourceUrl) {
+      const sourceUrlValidation = this.validateSourceUrl(studentData.sourceUrl);
+      if (sourceUrlValidation.isValid) {
+        result.sourceUrl = sourceUrlValidation.url;
+        result.sourceDomain = sourceUrlValidation.domain;
+      } else {
+        // Rejet si URL source invalide
+        this.logRejection(
+          `${studentData.firstName} ${studentData.lastName}`, 
+          sourceUrlValidation.reason, 
+          studentData.source, 
+          studentData.sourceUrl
+        );
+        return null; // Contact rejeté
+      }
+    } else {
+      // Rejet si pas d'URL source
+      this.logRejection(
+        `${studentData.firstName} ${studentData.lastName}`, 
+        'SOURCE_URL_MISSING', 
+        studentData.source, 
+        null
+      );
+      return null; // Contact rejeté
+    }
 
     let hasValidEmail = false;
     let hasValidPhone = false;
 
-    // Validation email
+    // Validation email avec URL source
     if (studentData.email) {
-      const emailValidation = this.validateEmail(studentData.email, studentData.source);
+      const emailValidation = this.validateEmail(
+        studentData.email, 
+        studentData.source, 
+        result.sourceUrl
+      );
       if (emailValidation.isValid) {
         result.email = emailValidation.email;
         result.emailStatus = 'VERIFIED';
         result.emailProvider = emailValidation.provider;
         result.emailVerifiedAt = new Date().toISOString();
+        result.emailSourceUrl = emailValidation.sourceUrl;
         hasValidEmail = true;
       } else {
         result.emailStatus = 'REJECTED';
@@ -146,13 +230,18 @@ export class RealContactValidator {
       }
     }
 
-    // Validation téléphone
+    // Validation téléphone avec URL source
     if (studentData.phone) {
-      const phoneValidation = this.validatePhone(studentData.phone, studentData.country);
+      const phoneValidation = this.validatePhone(
+        studentData.phone, 
+        studentData.country, 
+        result.sourceUrl
+      );
       if (phoneValidation.isValid) {
         result.phone = phoneValidation.phone;
         result.phoneStatus = 'VERIFIED';
         result.phoneCountryCode = phoneValidation.countryCode;
+        result.phoneSourceUrl = phoneValidation.sourceUrl;
         hasValidPhone = true;
       } else {
         result.phoneStatus = 'REJECTED';
@@ -198,21 +287,23 @@ export class RealContactValidator {
       name: `${studentData.firstName} ${studentData.lastName}`,
       country: studentData.country,
       domain: studentData.domain,
+      sourceUrl: studentData.sourceUrl,
       reason: 'NO_VALID_CONTACT_INFO',
       addedAt: new Date().toISOString()
     });
   }
 
   /**
-   * Enregistre les rejets pour monitoring
+   * Enregistre les rejets pour monitoring avec URL source
    */
-  logRejection(contact, reason, source) {
+  logRejection(contact, reason, source, sourceUrl) {
     const key = `${contact}_${reason}`;
     if (!this.rejectedContacts.has(key)) {
       this.rejectedContacts.set(key, {
         contact,
         reason,
         source,
+        sourceUrl,
         count: 1,
         firstRejectedAt: new Date().toISOString()
       });
@@ -228,7 +319,8 @@ export class RealContactValidator {
     return {
       totalRejected: this.rejectedContacts.size,
       manualReviewPending: this.manualReviewQueue.length,
-      rejectionReasons: this.getRejectionReasons()
+      rejectionReasons: this.getRejectionReasons(),
+      sourceUrlsTracked: this.sourceUrls.size
     };
   }
 
@@ -247,7 +339,7 @@ export class RealContactValidator {
    * Filtre uniquement les profils avec contacts valides
    */
   filterValidContactsOnly(students) {
-    return students.filter(student => student.hasValidContact);
+    return students.filter(student => student && student.hasValidContact);
   }
 
   /**
@@ -255,6 +347,20 @@ export class RealContactValidator {
    */
   getManualReviewQueue() {
     return this.manualReviewQueue;
+  }
+
+  /**
+   * Obtient les statistiques par domaine source
+   */
+  getSourceDomainStats() {
+    const domainStats = {};
+    for (const [email, url] of this.sourceUrls) {
+      const domain = this.extractDomainFromUrl(url);
+      if (domain) {
+        domainStats[domain] = (domainStats[domain] || 0) + 1;
+      }
+    }
+    return domainStats;
   }
 }
 
@@ -265,11 +371,12 @@ export const contactValidator = new RealContactValidator();
 export const validateAndFilterStudents = (rawStudents) => {
   const validatedStudents = rawStudents
     .map(student => contactValidator.validateStudentContact(student))
-    .filter(student => student.hasValidContact); // Ne garder que ceux avec contacts valides
+    .filter(student => student && student.hasValidContact); // Ne garder que ceux avec contacts valides ET URL source
 
   return {
     validStudents: validatedStudents,
     stats: contactValidator.getValidationStats(),
-    manualReviewQueue: contactValidator.getManualReviewQueue()
+    manualReviewQueue: contactValidator.getManualReviewQueue(),
+    sourceDomainStats: contactValidator.getSourceDomainStats()
   };
 };

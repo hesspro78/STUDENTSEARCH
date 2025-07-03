@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { ArrowLeft, MapPin, GraduationCap, Mail, Phone, Heart, Info, Linkedin, Rss, Users, Shield, CheckCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, GraduationCap, Mail, Phone, Heart, Info, Linkedin, Rss, Users, Shield, CheckCircle, ExternalLink, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -111,11 +111,17 @@ const StudentProfile = () => {
     window.location.href = mailtoLink;
   };
 
+  const handleSourceClick = () => {
+    if (student.sourceUrl) {
+      window.open(student.sourceUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <>
       <Helmet>
         <title>{`${student.firstName} ${student.lastName} - Profil Étudiant - EduConnect Maroc`}</title>
-        <meta name="description" content={`Découvrez le profil de ${student.firstName} ${student.lastName}, étudiant en ${student.domain} de ${student.country}, avec contact vérifié.`} />
+        <meta name="description" content={`Découvrez le profil de ${student.firstName} ${student.lastName}, étudiant en ${student.domain} de ${student.country}, avec contact vérifié et source tracée.`} />
       </Helmet>
 
       <div className="min-h-screen bg-gray-50 py-8">
@@ -162,7 +168,7 @@ const StudentProfile = () => {
                     <div className="mb-3">
                       <SourceBadge source={student.source} />
                     </div>
-                    <ContactQualityBadge student={student} />
+                    <ContactQualityBadge student={student} showSourceUrl={true} />
                     {student.hasValidContact && (
                       <Badge variant="verified" className="mt-2 flex items-center gap-1 justify-center">
                         <CheckCircle className="h-3 w-3" />
@@ -189,6 +195,17 @@ const StudentProfile = () => {
                       <Heart className={`h-4 w-4 ${isFavorite(student.id) ? 'fill-current' : ''}`} />
                       <span>{isFavorite(student.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}</span>
                     </Button>
+
+                    {student.sourceUrl && (
+                      <Button 
+                        variant="outline" 
+                        onClick={handleSourceClick}
+                        className="w-full flex items-center justify-center space-x-2 py-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        <span>Voir la Source</span>
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -206,6 +223,62 @@ const StudentProfile = () => {
                 </CardHeader>
                 <CardContent>
                   <p className="text-gray-700 leading-relaxed">{student.bio}</p>
+                </CardContent>
+              </Card>
+
+              {/* Nouvelle section Traçabilité */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <ExternalLink className="h-5 w-5 text-purple-600" />
+                    <span>Traçabilité et Source</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
+                      <ExternalLink className="h-5 w-5 text-purple-600" />
+                      <div className="flex-1">
+                        <p className="text-sm text-purple-600 font-medium">URL Source</p>
+                        <p className="font-mono text-sm text-gray-700 break-all">
+                          {student.sourceUrl || 'Non disponible'}
+                        </p>
+                        {student.sourceDomain && (
+                          <p className="text-xs text-purple-500 mt-1">
+                            Domaine: {student.sourceDomain}
+                          </p>
+                        )}
+                      </div>
+                      {student.sourceUrl && (
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={handleSourceClick}
+                          className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                        >
+                          Visiter
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {student.extractedAt && (
+                      <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <Calendar className="h-5 w-5 text-gray-600" />
+                        <div>
+                          <p className="text-sm text-gray-600">Date d'extraction</p>
+                          <p className="font-medium text-gray-900">
+                            {new Date(student.extractedAt).toLocaleDateString('fr-FR', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
               
@@ -231,17 +304,27 @@ const StudentProfile = () => {
                               Vérifié le {new Date(student.emailVerifiedAt).toLocaleDateString()}
                             </p>
                           )}
+                          {student.emailSourceUrl && (
+                            <p className="text-xs text-blue-600 mt-1 font-mono">
+                              Source: {student.emailSourceUrl}
+                            </p>
+                          )}
                         </div>
                         <ContactQualityBadge student={student} className="ml-auto" />
                       </div>
                       
                       <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                         <Phone className="h-5 w-5 text-gray-600" />
-                        <div>
+                        <div className="flex-1">
                           <p className="text-sm text-gray-600">Téléphone</p>
                           <p className="font-medium text-gray-900">
                             {student.phoneStatus === 'VERIFIED' ? student.phone : 'Non disponible'}
                           </p>
+                          {student.phoneSourceUrl && (
+                            <p className="text-xs text-blue-600 mt-1 font-mono">
+                              Source: {student.phoneSourceUrl}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
