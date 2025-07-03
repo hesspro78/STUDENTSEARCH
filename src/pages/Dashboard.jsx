@@ -2,17 +2,17 @@ import React, { useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { Heart, Eye, Users, TrendingUp, Star, MapPin, GraduationCap, Mail, Shield } from 'lucide-react';
+import { Heart, Eye, Users, TrendingUp, Star, MapPin, GraduationCap, Mail, Shield, CheckCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
-import { studentsData, emailValidationStats } from '@/data/enhanced-students';
+import { studentsData, contactQualityStats, validationStats } from '@/data/real-students-data';
 import { toast } from '@/components/ui/use-toast';
 import { useSettings } from '@/hooks/useSettings';
-import EmailVerificationBadge from '@/components/EmailVerificationBadge';
-import EmailValidationStats from '@/components/EmailValidationStats';
+import ContactQualityBadge from '@/components/ContactQualityBadge';
+import ValidationStatsCard from '@/components/ValidationStatsCard';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -30,9 +30,9 @@ const Dashboard = () => {
   
   const recommendedProfiles = useMemo(() => {
     if (favoriteStudents.length === 0) {
-      // Return verified email profiles first
+      // Retourner les profils avec contacts excellents en priorité
       return studentsData
-        .filter(student => student.emailStatus === 'VERIFIED')
+        .filter(student => student.contactQuality === 'EXCELLENT')
         .slice(0, 3);
     }
     
@@ -46,7 +46,7 @@ const Dashboard = () => {
     return studentsData.filter(student => 
         student.domain === topDomain && 
         !favorites.includes(student.id) &&
-        student.emailStatus === 'VERIFIED'
+        student.hasValidContact
     ).slice(0, 3);
   }, [favorites, favoriteStudents]);
 
@@ -54,12 +54,11 @@ const Dashboard = () => {
     return null;
   }
 
-  const verifiedContactsCount = studentsData.filter(s => s.emailStatus === 'VERIFIED').length;
   const stats = [
     { title: "Profils Consultés", value: viewedProfiles.length, icon: Eye, color: "text-blue-600", bgColor: "bg-blue-100" },
     { title: "Favoris", value: favorites.length, icon: Heart, color: "text-red-600", bgColor: "bg-red-100" },
     { title: "Contacts Initiés", value: contactedProfiles.length, icon: Mail, color: "text-green-600", bgColor: "bg-green-100" },
-    { title: "Contacts Vérifiés", value: verifiedContactsCount, icon: Shield, color: "text-purple-600", bgColor: "bg-purple-100" }
+    { title: "Contacts Vérifiés", value: contactQualityStats.totalValid, icon: Shield, color: "text-purple-600", bgColor: "bg-purple-100" }
   ];
 
   const handleRemoveFavorite = (studentId) => {
@@ -72,8 +71,9 @@ const Dashboard = () => {
       toast({ title: "Connexion requise", description: "Veuillez vous connecter pour contacter un étudiant.", variant: "destructive" });
       return;
     }
-    if (!student.email || student.emailStatus !== 'VERIFIED') {
-      toast({ title: "Contact non vérifié", description: "L'adresse email de cet étudiant n'est pas vérifiée.", variant: "destructive" });
+    
+    if (student.emailStatus !== 'VERIFIED') {
+      toast({ title: "Email non vérifié", description: "Seuls les emails vérifiés peuvent être contactés.", variant: "destructive" });
       return;
     }
 
@@ -102,11 +102,7 @@ const Dashboard = () => {
           </div>
           <div className="mt-2">
             <Badge variant="outline" className="text-xs mr-2">{student.domain}</Badge>
-            <EmailVerificationBadge 
-              email={student.email}
-              status={student.emailStatus}
-              className="inline-block"
-            />
+            <ContactQualityBadge student={student} className="inline-block" />
           </div>
         </div>
         <div className="flex flex-col space-y-2">
@@ -136,7 +132,7 @@ const Dashboard = () => {
     <>
       <Helmet>
         <title>Tableau de Bord - EduConnect Maroc</title>
-        <meta name="description" content="Gérez vos recherches d'étudiants, consultez vos favoris et suivez vos statistiques de recrutement sur EduConnect Maroc." />
+        <meta name="description" content="Gérez vos recherches d'étudiants avec contacts vérifiés et suivez vos statistiques de recrutement sur EduConnect Maroc." />
       </Helmet>
 
       <div className="min-h-screen bg-gray-50 py-8">
@@ -145,6 +141,15 @@ const Dashboard = () => {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
               <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Tableau de Bord</h1>
               <p className="text-xl text-gray-600">Bienvenue, <span className="font-semibold">{user.schoolName}</span></p>
+              <div className="mt-2 flex items-center space-x-2">
+                <Badge variant="verified" className="flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Contacts 100% Authentiques
+                </Badge>
+                <Badge variant="info">
+                  {contactQualityStats.totalValid} Profils Vérifiés
+                </Badge>
+              </div>
             </motion.div>
           </div>
 
@@ -167,7 +172,7 @@ const Dashboard = () => {
           </div>
 
           <div className="mb-8">
-            <EmailValidationStats stats={emailValidationStats} />
+            <ValidationStatsCard stats={validationStats} contactStats={contactQualityStats} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

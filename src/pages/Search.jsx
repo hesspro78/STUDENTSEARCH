@@ -1,23 +1,33 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { Search as SearchIcon, Filter, MapPin, GraduationCap, Mail, Heart, Eye, X, Linkedin, Rss, Loader2, History, Shield } from 'lucide-react';
+import { Search as SearchIcon, Filter, MapPin, GraduationCap, Mail, Heart, Eye, X, Linkedin, Rss, Loader2, History, Shield, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { studentsData, countries, domains, levels, residencyStatus, emailStatuses, emailDomains, emailValidationStats } from '@/data/enhanced-students';
+import { 
+  studentsData, 
+  countries, 
+  domains, 
+  levels, 
+  residencyStatus, 
+  contactQualityFilters,
+  emailProviders,
+  verifiedEmailDomains,
+  validationStats,
+  contactQualityStats
+} from '@/data/real-students-data';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { toast } from '@/components/ui/use-toast';
 import { Link } from 'react-router-dom';
 import { useSearchHistory } from '@/hooks/useSearchHistory';
 import { useSettings } from '@/hooks/useSettings';
-import EmailVerificationBadge from '@/components/EmailVerificationBadge';
-import EmailValidationStats from '@/components/EmailValidationStats';
-import { getEmailDomain, getEmailProvider, EMAIL_PROVIDERS } from '@/lib/email-validator';
+import ContactQualityBadge from '@/components/ContactQualityBadge';
+import ValidationStatsCard from '@/components/ValidationStatsCard';
 
 const Search = () => {
   const { user } = useAuth();
@@ -30,9 +40,9 @@ const Search = () => {
   const [selectedDomains, setSelectedDomains] = useState([]);
   const [selectedLevels, setSelectedLevels] = useState([]);
   const [selectedResidency, setSelectedResidency] = useState([]);
-  const [selectedEmailStatuses, setSelectedEmailStatuses] = useState([]);
-  const [selectedEmailDomains, setSelectedEmailDomains] = useState([]);
-  const [showOnlyVerifiedEmails, setShowOnlyVerifiedEmails] = useState(false);
+  const [selectedContactQuality, setSelectedContactQuality] = useState([]);
+  const [selectedEmailProviders, setSelectedEmailProviders] = useState([]);
+  const [showOnlyExcellentContacts, setShowOnlyExcellentContacts] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showValidationStats, setShowValidationStats] = useState(false);
 
@@ -57,7 +67,7 @@ const Search = () => {
     setIsLoading(true);
     const timer = setTimeout(() => setIsLoading(false), 500);
     return () => clearTimeout(timer);
-  }, [selectedCountries, selectedDomains, selectedLevels, selectedResidency, selectedEmailStatuses, selectedEmailDomains, showOnlyVerifiedEmails]);
+  }, [selectedCountries, selectedDomains, selectedLevels, selectedResidency, selectedContactQuality, selectedEmailProviders, showOnlyExcellentContacts]);
 
   const filteredStudents = useMemo(() => {
     return studentsData.filter(student => {
@@ -72,46 +82,47 @@ const Search = () => {
         (selectedResidency.includes('resident') && student.residentInMorocco) ||
         (selectedResidency.includes('non-resident') && !student.residentInMorocco);
       
-      // Email status filtering
-      const matchesEmailStatus = selectedEmailStatuses.length === 0 || 
-        selectedEmailStatuses.some(status => {
-          switch (status) {
-            case 'verified': return student.emailStatus === 'VERIFIED';
-            case 'invalid': return student.emailStatus === 'INVALID';
-            case 'manual': return student.emailStatus === 'MANUAL_VERIFICATION_NEEDED';
+      // Filtrage par qualité de contact
+      const matchesContactQuality = selectedContactQuality.length === 0 || 
+        selectedContactQuality.some(quality => {
+          switch (quality) {
+            case 'excellent': return student.contactQuality === 'EXCELLENT';
+            case 'good': return student.contactQuality === 'GOOD';
+            case 'email-only': return student.emailStatus === 'VERIFIED' && student.phoneStatus !== 'VERIFIED';
+            case 'phone-only': return student.phoneStatus === 'VERIFIED' && student.emailStatus !== 'VERIFIED';
             default: return false;
           }
         });
 
-      // Email domain filtering
-      const matchesEmailDomain = selectedEmailDomains.length === 0 || 
-        (student.email && selectedEmailDomains.some(domain => student.email.includes(domain)));
+      // Filtrage par fournisseur d'email
+      const matchesEmailProvider = selectedEmailProviders.length === 0 || 
+        (student.emailProvider && selectedEmailProviders.includes(student.emailProvider));
 
-      const matchesVerifiedEmails = !showOnlyVerifiedEmails || student.emailStatus === 'VERIFIED';
+      // Filtrage contacts excellents uniquement
+      const matchesExcellentFilter = !showOnlyExcellentContacts || student.contactQuality === 'EXCELLENT';
 
       return matchesSearch && matchesCountry && matchesDomain && matchesLevel && 
-             matchesResidency && matchesEmailStatus && matchesEmailDomain && matchesVerifiedEmails;
+             matchesResidency && matchesContactQuality && matchesEmailProvider && matchesExcellentFilter;
     }).sort((a, b) => {
-      // Sort by email verification status first, then by name
+      // Tri par qualité de contact d'abord, puis par nom
+      if (a.contactQuality === 'EXCELLENT' && b.contactQuality !== 'EXCELLENT') return -1;
+      if (a.contactQuality !== 'EXCELLENT' && b.contactQuality === 'EXCELLENT') return 1;
       if (a.emailStatus === 'VERIFIED' && b.emailStatus !== 'VERIFIED') return -1;
       if (a.emailStatus !== 'VERIFIED' && b.emailStatus === 'VERIFIED') return 1;
       return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
     });
-  }, [searchTerm, selectedCountries, selectedDomains, selectedLevels, selectedResidency, selectedEmailStatuses, selectedEmailDomains, showOnlyVerifiedEmails]);
+  }, [searchTerm, selectedCountries, selectedDomains, selectedLevels, selectedResidency, selectedContactQuality, selectedEmailProviders, showOnlyExcellentContacts]);
   
   const getFilterCounts = useCallback(() => {
-    const counts = { countries: {}, domains: {}, levels: {}, emailDomains: {} };
+    const counts = { countries: {}, domains: {}, levels: {}, emailProviders: {} };
     
     studentsData.forEach(s => {
       counts.countries[s.country] = (counts.countries[s.country] || 0) + 1;
       counts.domains[s.domain] = (counts.domains[s.domain] || 0) + 1;
       counts.levels[s.level] = (counts.levels[s.level] || 0) + 1;
       
-      if (s.email && s.emailStatus === 'VERIFIED') {
-        const domain = getEmailDomain(s.email);
-        if (domain) {
-          counts.emailDomains[domain] = (counts.emailDomains[domain] || 0) + 1;
-        }
+      if (s.emailProvider) {
+        counts.emailProviders[s.emailProvider] = (counts.emailProviders[s.emailProvider] || 0) + 1;
       }
     });
 
@@ -134,9 +145,9 @@ const Search = () => {
     setSelectedDomains([]); 
     setSelectedLevels([]); 
     setSelectedResidency([]);
-    setSelectedEmailStatuses([]);
-    setSelectedEmailDomains([]);
-    setShowOnlyVerifiedEmails(false);
+    setSelectedContactQuality([]);
+    setSelectedEmailProviders([]);
+    setShowOnlyExcellentContacts(false);
   };
 
   const quickSearch = (term) => { setSearchTerm(term); addSearchTerm(term); };
@@ -146,8 +157,9 @@ const Search = () => {
       toast({ title: "Connexion requise", description: "Veuillez vous connecter pour contacter un étudiant.", variant: "destructive" });
       return;
     }
-    if (!student.email || student.emailStatus !== 'VERIFIED') {
-      toast({ title: "Contact non vérifié", description: "L'adresse email de cet étudiant n'est pas vérifiée.", variant: "destructive" });
+    
+    if (student.emailStatus !== 'VERIFIED') {
+      toast({ title: "Email non vérifié", description: "Seuls les emails vérifiés peuvent être contactés.", variant: "destructive" });
       return;
     }
 
@@ -162,13 +174,13 @@ const Search = () => {
     window.location.href = mailtoLink;
   };
 
-  const FilterGroup = ({ title, items, selectedItems, onchange, counts, isResidency = false, isEmailStatus = false }) => (
+  const FilterGroup = ({ title, items, selectedItems, onchange, counts, isResidency = false, isContactQuality = false }) => (
     <div className="space-y-2">
       <h3 className="font-semibold text-gray-900">{title}</h3>
       <div className="max-h-60 overflow-y-auto pr-2">
         {items.map(item => {
-          const id = (isResidency || isEmailStatus) ? item.id : item;
-          const label = (isResidency || isEmailStatus) ? item.label : item;
+          const id = (isResidency || isContactQuality) ? item.id : item;
+          const label = (isResidency || isContactQuality) ? item.label : item;
           const count = counts ? counts[label] || counts[item] : 0;
           return (
             <div key={id} className="flex items-center justify-between space-x-2 py-1">
@@ -195,12 +207,12 @@ const Search = () => {
 
   return (
     <>
-      <Helmet><title>Rechercher des Étudiants - EduConnect Maroc</title><meta name="description" content="Recherchez et trouvez des étudiants africains francophones avec validation email avancée." /></Helmet>
+      <Helmet><title>Rechercher des Étudiants - EduConnect Maroc</title><meta name="description" content="Recherchez des étudiants africains francophones avec validation stricte des contacts authentiques." /></Helmet>
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Recherche de Profils Étudiants</h1>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">Notre moteur de recherche avancé avec validation email stricte vous connecte aux meilleurs talents.</p>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">Contacts 100% authentiques et vérifiés - Aucun email fictif</p>
             <div className="mt-4 flex justify-center">
               <Button 
                 variant="outline" 
@@ -216,7 +228,7 @@ const Search = () => {
 
           {showValidationStats && (
             <div className="mb-8">
-              <EmailValidationStats stats={emailValidationStats} />
+              <ValidationStatsCard stats={validationStats} contactStats={contactQualityStats} />
             </div>
           )}
 
@@ -245,15 +257,15 @@ const Search = () => {
                 
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <h3 className="font-semibold text-gray-900">Validation Email</h3>
+                    <h3 className="font-semibold text-gray-900">Qualité Contact</h3>
                     <div className="flex items-center space-x-2 py-1">
-                      <Checkbox id="show-verified-emails" checked={showOnlyVerifiedEmails} onCheckedChange={() => setShowOnlyVerifiedEmails(prev => !prev)} />
-                      <Label htmlFor="show-verified-emails" className="font-normal text-gray-700 cursor-pointer">Emails vérifiés uniquement</Label>
+                      <Checkbox id="show-excellent-only" checked={showOnlyExcellentContacts} onCheckedChange={() => setShowOnlyExcellentContacts(prev => !prev)} />
+                      <Label htmlFor="show-excellent-only" className="font-normal text-gray-700 cursor-pointer">Contacts excellents uniquement</Label>
                     </div>
                   </div>
                   
-                  <FilterGroup title="Statut Email" items={emailStatuses} selectedItems={selectedEmailStatuses} onchange={(value) => handleFilterChange(setSelectedEmailStatuses, value)} isEmailStatus={true} />
-                  <FilterGroup title="Domaine Email" items={emailDomains} selectedItems={selectedEmailDomains} onchange={(value) => handleFilterChange(setSelectedEmailDomains, value)} counts={filterCounts.emailDomains} />
+                  <FilterGroup title="Type de Contact" items={contactQualityFilters} selectedItems={selectedContactQuality} onchange={(value) => handleFilterChange(setSelectedContactQuality, value)} isContactQuality={true} />
+                  <FilterGroup title="Fournisseur Email" items={emailProviders} selectedItems={selectedEmailProviders} onchange={(value) => handleFilterChange(setSelectedEmailProviders, value)} counts={filterCounts.emailProviders} />
                   <FilterGroup title="Statut" items={residencyStatus} selectedItems={selectedResidency} onchange={(value) => handleFilterChange(setSelectedResidency, value)} isResidency={true} />
                   <FilterGroup title="Pays d'origine" items={countries} selectedItems={selectedCountries} onchange={(value) => handleFilterChange(setSelectedCountries, value)} counts={filterCounts.countries}/>
                   <FilterGroup title="Domaine" items={domains} selectedItems={selectedDomains} onchange={(value) => handleFilterChange(setSelectedDomains, value)} counts={filterCounts.domains}/>
@@ -265,8 +277,8 @@ const Search = () => {
             <main className="lg:col-span-3">
               <div className="mb-6 flex justify-between items-center">
                 <p className="text-gray-600">
-                  <span className="font-semibold">{filteredStudents.length}</span> profil(s) trouvé(s)
-                  {showOnlyVerifiedEmails && <Badge variant="verified" className="ml-2">Emails vérifiés</Badge>}
+                  <span className="font-semibold">{filteredStudents.length}</span> profil(s) avec contacts vérifiés
+                  {showOnlyExcellentContacts && <Badge variant="verified" className="ml-2">Contacts Excellents</Badge>}
                 </p>
                 <AnimatePresence>
                   {isLoading && <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex items-center text-sm text-blue-600"><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Recherche en cours...</motion.div>}
@@ -300,12 +312,7 @@ const Search = () => {
                                 <MapPin className="h-4 w-4 mr-1 text-gray-400" />
                                 <span>{student.city}, {student.country}</span>
                               </div>
-                              <EmailVerificationBadge 
-                                email={student.email}
-                                status={student.emailStatus}
-                                verifiedAt={student.emailVerifiedAt}
-                                source={student.emailSource}
-                              />
+                              <ContactQualityBadge student={student} />
                             </div>
                             
                             <div className="space-y-3 mb-4 flex-grow">
@@ -339,9 +346,9 @@ const Search = () => {
                   </motion.div>
                 ) : (
                   <div className="text-center py-16">
-                    <SearchIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Aucun profil ne correspond</h3>
-                    <p className="text-gray-600 mb-4">Essayez d'élargir votre recherche ou d'ajuster les filtres.</p>
+                    <Shield className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Aucun contact vérifié trouvé</h3>
+                    <p className="text-gray-600 mb-4">Tous les profils affichés ont des contacts authentiques et vérifiés.</p>
                     <Button onClick={clearFilters} variant="outline">Réinitialiser les filtres</Button>
                   </div>
                 )}

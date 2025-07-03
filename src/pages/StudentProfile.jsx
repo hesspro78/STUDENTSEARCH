@@ -2,18 +2,18 @@ import React, { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { ArrowLeft, MapPin, GraduationCap, Mail, Phone, Heart, Info, Linkedin, Rss, Users, Shield } from 'lucide-react';
+import { ArrowLeft, MapPin, GraduationCap, Mail, Phone, Heart, Info, Linkedin, Rss, Users, Shield, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { studentsData } from '@/data/enhanced-students';
+import { studentsData } from '@/data/real-students-data';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { toast } from '@/components/ui/use-toast';
 import { findSimilarProfiles } from '@/lib/scoring';
 import SimilarProfileCard from '@/components/SimilarProfileCard';
 import { useSettings } from '@/hooks/useSettings';
-import EmailVerificationBadge from '@/components/EmailVerificationBadge';
+import ContactQualityBadge from '@/components/ContactQualityBadge';
 
 const StudentProfile = () => {
   const { id } = useParams();
@@ -87,10 +87,10 @@ const StudentProfile = () => {
       return;
     }
     
-    if (!student.email || student.emailStatus !== 'VERIFIED') {
+    if (student.emailStatus !== 'VERIFIED') {
       toast({ 
-        title: "Contact non vérifié", 
-        description: "L'adresse email de cet étudiant n'est pas vérifiée.", 
+        title: "Email non vérifié", 
+        description: "Seuls les emails vérifiés peuvent être contactés.", 
         variant: "destructive" 
       });
       return;
@@ -111,18 +111,11 @@ const StudentProfile = () => {
     window.location.href = mailtoLink;
   };
 
-  const handleManualVerification = () => {
-    toast({
-      title: "🚧 Fonctionnalité en cours de développement",
-      description: "La vérification manuelle sera bientôt disponible.",
-    });
-  };
-
   return (
     <>
       <Helmet>
         <title>{`${student.firstName} ${student.lastName} - Profil Étudiant - EduConnect Maroc`}</title>
-        <meta name="description" content={`Découvrez le profil de ${student.firstName} ${student.lastName}, étudiant en ${student.domain} de ${student.country}, disponible pour des études au Maroc.`} />
+        <meta name="description" content={`Découvrez le profil de ${student.firstName} ${student.lastName}, étudiant en ${student.domain} de ${student.country}, avec contact vérifié.`} />
       </Helmet>
 
       <div className="min-h-screen bg-gray-50 py-8">
@@ -169,12 +162,13 @@ const StudentProfile = () => {
                     <div className="mb-3">
                       <SourceBadge source={student.source} />
                     </div>
-                    <EmailVerificationBadge 
-                      email={student.email}
-                      status={student.emailStatus}
-                      verifiedAt={student.emailVerifiedAt}
-                      source={student.emailSource}
-                    />
+                    <ContactQualityBadge student={student} />
+                    {student.hasValidContact && (
+                      <Badge variant="verified" className="mt-2 flex items-center gap-1 justify-center">
+                        <CheckCircle className="h-3 w-3" />
+                        Contact Authentique Vérifié
+                      </Badge>
+                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -195,13 +189,6 @@ const StudentProfile = () => {
                       <Heart className={`h-4 w-4 ${isFavorite(student.id) ? 'fill-current' : ''}`} />
                       <span>{isFavorite(student.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}</span>
                     </Button>
-                    
-                    {student.emailStatus === 'MANUAL_VERIFICATION_NEEDED' && (
-                      <Button variant="secondary" onClick={handleManualVerification} className="w-full">
-                        <Shield className="h-4 w-4 mr-2" />
-                        Vérifier Manuellement
-                      </Button>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -225,8 +212,8 @@ const StudentProfile = () => {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <Mail className="h-5 w-5 text-blue-600" />
-                    <span>Informations de Contact</span>
+                    <Shield className="h-5 w-5 text-green-600" />
+                    <span>Informations de Contact Vérifiées</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -239,17 +226,13 @@ const StudentProfile = () => {
                           <p className="font-medium text-gray-900">
                             {student.emailStatus === 'VERIFIED' ? student.email : 'Non disponible'}
                           </p>
-                          {student.emailStatus !== 'VERIFIED' && (
-                            <p className="text-xs text-amber-600 mt-1">
-                              {student.emailRejectionReason && `Raison: ${student.emailRejectionReason}`}
+                          {student.emailStatus === 'VERIFIED' && student.emailVerifiedAt && (
+                            <p className="text-xs text-green-600 mt-1">
+                              Vérifié le {new Date(student.emailVerifiedAt).toLocaleDateString()}
                             </p>
                           )}
                         </div>
-                        <EmailVerificationBadge 
-                          email={student.email}
-                          status={student.emailStatus}
-                          className="ml-auto"
-                        />
+                        <ContactQualityBadge student={student} className="ml-auto" />
                       </div>
                       
                       <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
@@ -264,8 +247,8 @@ const StudentProfile = () => {
                     </div>
                   ) : (
                     <div className="text-center py-8">
-                      <Mail className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-600 mb-4">Connectez-vous pour accéder aux informations de contact</p>
+                      <Shield className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-600 mb-4">Connectez-vous pour accéder aux informations de contact vérifiées</p>
                       <Button onClick={() => navigate('/connexion')}>Se connecter</Button>
                     </div>
                   )}
@@ -306,7 +289,7 @@ const StudentProfile = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
                       <Users className="h-5 w-5 text-purple-600" />
-                      <span>Profils Similaires</span>
+                      <span>Profils Similaires avec Contacts Vérifiés</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
